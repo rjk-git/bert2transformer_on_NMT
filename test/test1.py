@@ -1,5 +1,5 @@
-import numpy as np
-from mxnet import nd
+# import numpy as np
+# from mxnet import nd
 # from bert_embedding import BertEmbedding
 # from prepo import load_en_vocab
 # from mxnet.gluon import data as gdata
@@ -19,9 +19,21 @@ from mxnet import nd
 # print(len(result))
 # print(result[0][0])
 # print(result[0][1][0].tolist())
-from bert_embedding import BertEmbedding
-from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
+import os
+from mxnet import nd
+from mxnet.gluon.loss import SoftmaxCrossEntropyLoss as sceloss
 
-tokenizer = BERTTokenizer()
-list = tokenizer.basic_tokenizer._tokenize("this is a test.")
-print(list)
+label = nd.array([[15, 15, 15, 15, 15],
+                  [3, 5, 2, 1, 1],
+                  [3, 5, 2, 1, 1],
+                  [3, 5, 2, 1, 1],
+                  [3, 5, 2, 1, 1]])
+
+pred = nd.array([[3, 1, 1, 2, 2],
+                  [3, 5, 2, 1, 1],
+                  [3, 5, 2, 1, 1],
+                  [3, 5, 2, 1, 1],
+                  [3, 5, 2, 1, 1]])
+
+loss = sceloss(axis=-1, sparse_label=False, from_logits=False)
+print(loss(pred, label))

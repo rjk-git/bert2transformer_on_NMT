@@ -6,14 +6,14 @@ from mxnet import gluon
 from mxnet.gluon import loss as gloss
 from mxnet import autograd
 from mxnet import nd
-from prepo import get_en_sentences_loader, load_zh_vocab
+from prepo import get_data_loader, load_zh_vocab
 from hyperParameters import GetHyperParameters as ghp
 import os
 import bert_embedding
 
 def main():
     # get dataSet
-    train_data_loader = get_en_sentences_loader(ghp.batch_size)
+    train_data_loader = get_data_loader()
     zh2idx, _ = load_zh_vocab()
 
     # build model
@@ -31,7 +31,7 @@ def main():
 
 def train_and_valid(transformer_model, data_loader_train):
     lr_cut = 0.9
-    loss = gloss.SoftmaxCrossEntropyLoss(axis=-1, batch_axis=0)
+    loss = gloss.SoftmaxCrossEntropyLoss(axis=-1, batch_axis=0, sparse_label=False, from_logits=True)
     bert = bert_embedding.BertEmbedding()
 
     for epoch in range(ghp.epoch_nums):
@@ -52,7 +52,6 @@ def train_and_valid(transformer_model, data_loader_train):
                 one_sent_emb = []
 
                 seq_valid_len = len(result[i][0])
-                print(result[i][0])
                 one_sent_idx = [1] * seq_valid_len + [0] * (ghp.max_seq_len - seq_valid_len)
 
                 # embedding
@@ -78,11 +77,10 @@ def train_and_valid(transformer_model, data_loader_train):
             print("loss:{0}, acc:{1}".format(loss_mean.asscalar(), acc.asscalar()))
             print("\n")
 
-        if (epoch + 1) % 1 == 0:
-            if not os.path.exists("parameter"):
-                os.makedirs("parameter")
-            model_params_file = "parameter/epoch" + str(epoch) + ".params"
-            transformer_model.save_parameters(model_params_file)
+        if not os.path.exists("parameter"):
+            os.makedirs("parameter")
+        model_params_file = "parameter/epoch" + str(epoch) + ".params"
+        transformer_model.save_parameters(model_params_file)
 
 
 def batch_loss(transformer_model, x_en_emb, x_en_idx, y_zh_idx, loss):
@@ -104,9 +102,8 @@ def batch_loss(transformer_model, x_en_emb, x_en_idx, y_zh_idx, loss):
 
     output, dec_self_attn, context_attn = transformer_model(x_en_emb, x_en_idx, dec_input_zh_idx)
     output = nd.softmax(output, axis=-1)
-    print(output[0])
     predict = nd.argmax(output, axis=-1)
-    print(predict[0])
+
     label_token = []
     for n in range(len(y_zh_idx[0])):
         label_token.append(idx2zh[int(y_zh_idx[0][n])])
@@ -117,15 +114,22 @@ def batch_loss(transformer_model, x_en_emb, x_en_idx, y_zh_idx, loss):
         predict_token.append(idx2zh[int(predict[0][n].asscalar())])
     print("predict", "".join(predict_token))
 
-    #translate(transformer_model, "Don 't run away with and idea that you didn 't think through.")
+    # translate(transformer_model, "Don 't run away with and idea that you didn 't think through.")
 
     y_zh_idx = nd.array(y_zh_idx, ghp.ctx)
     is_target = nd.not_equal(y_zh_idx, 0)
     current = nd.equal(y_zh_idx, predict) * is_target
     acc = nd.sum(current) / nd.sum(is_target)
-    l = loss(output, y_zh_idx)
-    l_mean = nd.sum(l) / nd.sum(is_target)
-    return l_mean, acc
+
+    predict_rates = nd.pick(output, predict)
+
+    predict_rates_h = nd.log(predict_rates) * -1
+
+    current_rates_h = predict_rates_h * is_target
+
+    current_rates_h = nd.sum(current_rates_h) / batch_size
+
+    return current_rates_h, acc
 
 
 def _init_position_weight():
