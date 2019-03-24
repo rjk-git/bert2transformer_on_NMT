@@ -10,6 +10,9 @@ from prepo import get_data_loader, load_zh_vocab
 from hyperParameters import GetHyperParameters as ghp
 import os
 import bert_embedding
+from mxboard import *
+
+sw = SummaryWriter(logdir='./logs', flush_secs=5)
 
 def main():
     # get dataSet
@@ -31,18 +34,18 @@ def main():
 
 def train_and_valid(transformer_model, data_loader_train):
     lr_cut = 0.9
-    loss = gloss.SoftmaxCrossEntropyLoss(axis=-1, batch_axis=0, sparse_label=False, from_logits=True)
+    loss = gloss.SoftmaxCrossEntropyLoss()
     bert = bert_embedding.BertEmbedding()
-
+    global_step = 0
     for epoch in range(ghp.epoch_nums):
-        lr = ghp.lr * lr_cut
-        model_trainer = gluon.Trainer(transformer_model.collect_params(), 'sgd', {'learning_rate': lr})
+        # lr = ghp.lr * lr_cut
+        model_trainer = gluon.Trainer(transformer_model.collect_params(), 'adam', {"learning_rate" : ghp.lr})
         count = 0
 
         for en_sentences, zh_idxs in data_loader_train:
             count += 1
             print("现在是第{}个epoch（总计{}个epoch），第{}批数据。(lr:{}s)"
-                  .format(epoch + 1, ghp.epoch_nums, count, lr))
+                  .format(epoch + 1, ghp.epoch_nums, count, model_trainer.learning_rate))
 
             result = bert(en_sentences)
             all_sentences_emb = []
@@ -72,6 +75,8 @@ def train_and_valid(transformer_model, data_loader_train):
 
             with autograd.record():
                 loss_mean, acc = batch_loss(transformer_model, x_en_emb, x_en_idx, y_zh_idx, loss)
+            sw.add_scalar(tag='cross_entropy', value=loss_mean.asscalar(), global_step=global_step)
+            global_step += 1
             loss_mean.backward()
             model_trainer.step(x_en_emb.shape[0])
             print("loss:{0}, acc:{1}".format(loss_mean.asscalar(), acc.asscalar()))
@@ -101,8 +106,7 @@ def batch_loss(transformer_model, x_en_emb, x_en_idx, y_zh_idx, loss):
     dec_input_zh_idx = nd.array(dec_input_zh_idx, ghp.ctx)
 
     output, dec_self_attn, context_attn = transformer_model(x_en_emb, x_en_idx, dec_input_zh_idx)
-    output = nd.softmax(output, axis=-1)
-    predict = nd.argmax(output, axis=-1)
+    predict = nd.argmax(nd.softmax(output, axis=-1), axis=-1)
 
     label_token = []
     for n in range(len(y_zh_idx[0])):
@@ -121,15 +125,10 @@ def batch_loss(transformer_model, x_en_emb, x_en_idx, y_zh_idx, loss):
     current = nd.equal(y_zh_idx, predict) * is_target
     acc = nd.sum(current) / nd.sum(is_target)
 
-    predict_rates = nd.pick(output, predict)
+    l = loss(output, y_zh_idx)
+    l_mean = nd.sum(l) / batch_size
 
-    predict_rates_h = nd.log(predict_rates) * -1
-
-    current_rates_h = predict_rates_h * is_target
-
-    current_rates_h = nd.sum(current_rates_h) / batch_size
-
-    return current_rates_h, acc
+    return l_mean, acc
 
 
 def _init_position_weight():

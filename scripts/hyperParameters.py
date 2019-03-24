@@ -27,10 +27,10 @@ class GetHyperParameters(object):
     en_vocab_file = "./vocab/en_vocab.tsv"
 
     # process corpus params
-    min_count_vocab_size = 1
-    max_seq_len = 30
-    en_vocab_size = 3000
-    zh_vocab_size = 15000
+    min_count_vocab_size = 20
+    max_seq_len = 20
+    en_vocab_size = 80000
+    zh_vocab_size = 100000
 
     # model hyper params
     layer_nums = 6

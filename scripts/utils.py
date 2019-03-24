@@ -83,7 +83,6 @@ def sequence_mask(batch_seqs):
     return mask
 
 
-
 def word_piece_tokenizer(sentences):
     ctx = mx.cpu()
     model = 'bert_12_768_12'
@@ -126,6 +125,7 @@ def word_piece_tokenizer(sentences):
                 tokens.append(token)
         cut_results.append(tokens)
     return cut_results
+
 
 if __name__ == '__main__':
     sentences = ["I want to see something.", "such as this picture is very beautiful,right?jackhoried.", "unaffable"]
