@@ -1,6 +1,10 @@
 from mxnet.gluon import nn
 from models.attention import MultiHeadAttention
 from models.feed_forward import FeedForward
+from mxnet import nd
+from hyperParameters import GetHyperParameters as ghp
+
+
 class DecoderLayer(nn.Block):
     def __init__(self, **kwargs):
         super(DecoderLayer, self).__init__(**kwargs)
@@ -10,24 +14,27 @@ class DecoderLayer(nn.Block):
             self.context_attention = MultiHeadAttention()
             self.feed_forward = FeedForward()
 
-    def forward(self, en_emb, zh_emb, self_attn_mask, context_attn_mask):
+    def forward(self, en_emb, zh_emb, is_training):
         # self attention, all inputs are decoder inputs
-        dec_output, self_attention = self.self_masked_attention(
+        dec_output = self.self_masked_attention(
             zh_emb,
             zh_emb,
             zh_emb,
-            self_attn_mask)
+            True,
+            is_training)
 
         # context attention
         # query is decoder's outputs, key and value are encoder's inputs
 
-        dec_output, context_attention = self.context_attention(
+        dec_output = self.context_attention(
             dec_output,
             en_emb,
             en_emb,
-            context_attn_mask)
+            False,
+            is_training)
 
         # decoder's output, or context
         dec_output = self.feed_forward(dec_output)
 
-        return dec_output, self_attention, context_attention
+        return dec_output
+

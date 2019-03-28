@@ -1,19 +1,12 @@
-import os
-import json
-import pickle
-import mxnet as mx
 import numpy as np
 from mxnet import nd
-from gluonnlp import Vocab, data
 from hyperParameters import GetHyperParameters as ghp
-from typing import List
-
 import gluonnlp
 import mxnet as mx
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from mxnet.gluon.data import DataLoader
-
 from bert_embedding.dataset import BertEmbeddingDataset
+
 
 def padding_mask(seq_k, seq_q):
 
@@ -77,17 +70,17 @@ def padding_mask(seq_k, seq_q):
 def sequence_mask(batch_seqs):
     batch_size, seq_len = batch_seqs.shape
     mask_matrix = np.ones(shape=(seq_len, seq_len), dtype=np.float)
-    mask = np.triu(mask_matrix, k=0)
+    mask = np.tril(mask_matrix, k=0)
     mask = nd.expand_dims(nd.array(mask, ghp.ctx), axis=0)
     mask = nd.broadcast_axes(mask, axis=0, size=batch_size)
     return mask
 
 
 def word_piece_tokenizer(sentences):
-    ctx = mx.cpu()
+    ctx = ghp.ctx
     model = 'bert_12_768_12'
     dataset_name = 'book_corpus_wiki_en_uncased'
-    max_seq_length = 20
+    max_seq_length = ghp.max_seq_len
     batch_size = 256
     _, vocab = gluonnlp.model.get_model(model,
                                         dataset_name=dataset_name,
@@ -125,9 +118,3 @@ def word_piece_tokenizer(sentences):
                 tokens.append(token)
         cut_results.append(tokens)
     return cut_results
-
-
-if __name__ == '__main__':
-    sentences = ["I want to see something.", "such as this picture is very beautiful,right?jackhoried.", "unaffable"]
-    tokenizer = word_piece_tokenizer(sentences)
-    print(tokenizer)

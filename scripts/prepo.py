@@ -5,11 +5,12 @@ import jieba
 from collections import Counter
 from hyperParameters import GetHyperParameters as ghp
 from scripts.utils import word_piece_tokenizer
+from tqdm import tqdm
 from mxnet import nd
 
 
 def divide_data():
-    first_file = open(os.listdir("../data/")[0], "r", encoding="utf-8")
+    first_file = open("./temp_data/" + os.listdir("./temp_data/")[0], "r", encoding="utf-8")
     lines = first_file.readlines()
     en_list = []
     zh_list = []
@@ -128,7 +129,7 @@ def create_train_data(en_sentences, zh_sentences):
     ens = word_piece_tokenizer(en_sentences)
     for i, (en_sentence, zh_sentence) in enumerate(zip(en_sentences, zh_sentences)):
         zh = [zh2idx.get(word, 1) for word in (" ".join([w for w in jieba.cut(zh_sentence)]) + " <eos>").split()]
-        if len(ens[i]) <= ghp.max_seq_len-5 and len(zh) <= ghp.max_seq_len:
+        if len(ens[i]) <= ghp.max_seq_len and len(zh) <= ghp.max_seq_len:
             en_list.append(ens[i])
             zh_list.append(zh)
             train_en_sentences.append(en_sentence)
@@ -143,30 +144,27 @@ def create_train_data(en_sentences, zh_sentences):
     return train_en_sentences, train_zh_sentences, train_zh_idx
 
 
-def create_train_data2(en_sentences, zh_sentences):
+def create_train_data2(zh_sentences):
     zh2idx, idx2zh = load_zh_vocab()
 
     # word to idx
-    en_list = []
     zh_list = []
-    train_en_sentences = []
-    train_zh_sentences = []
-    ens = word_piece_tokenizer(en_sentences)
-    for i, (en_sentence, zh_sentence) in enumerate(zip(en_sentences, zh_sentences)):
-        zh = [zh2idx.get(word, 1) for word in (zh_sentence + " <eos>").split()]
-        if len(ens[i]) <= ghp.max_seq_len-2 and len(zh) <= ghp.max_seq_len:
-            en_list.append(ens[i])
+
+    with tqdm(total=len(zh_sentences)) as bar:
+        for zh_sentence in zh_sentences:
+            bar.update(1)
+            zh = [zh2idx.get(word, 1) for word in (zh_sentence + " <eos>").split()]
             zh_list.append(zh)
-            train_en_sentences.append(en_sentence)
-            train_zh_sentences.append(zh_sentence)
 
     # pad to max seq len
     train_zh_idx = np.zeros([len(zh_list), ghp.max_seq_len], np.int32)
 
-    for i, zh in enumerate(zh_list):
-        train_zh_idx[i] = np.lib.pad(zh, (0, ghp.max_seq_len - len(zh)), 'constant', constant_values=(0, 0))
+    with tqdm(total=len(zh_list)) as bar:
+        for i, zh in enumerate(zh_list):
+            bar.update(1)
+            train_zh_idx[i] = np.lib.pad(zh, (0, ghp.max_seq_len - len(zh)), 'constant', constant_values=(0, 0))
 
-    return train_en_sentences, train_zh_sentences, train_zh_idx
+    return train_zh_idx
 
 
 def get_data_loader():
@@ -196,31 +194,33 @@ def get_data_loader():
 
 
 def get_data_loader2():
+    print("#######开始加载训练数据：英文， 中文（已分词）#########")
     batch_size = ghp.batch_size
 
-    # process sentences
-    if not os.path.exists(ghp.handled_en_train_file) or not os.path.exists(ghp.handled_zh_train_file):
-        origin_en_sentences, origin_zh_sentences = load_origin_sentences_data()
-        train_en_sentences, train_zh_sentences, train_zh_idx = create_train_data2(origin_en_sentences, origin_zh_sentences)
-        save_train_sentences_data(train_en_sentences, train_zh_sentences)
-        np.save(ghp.handled_zh_idx_file_name, train_zh_idx)
-    # get processed sentences and idx zh
-    else:
+    origin_en_sentences, origin_zh_sentences = load_origin_sentences_data()
+    print("获取训练数据：中文{}条句子，英文{}条句子成功！".format(len(origin_zh_sentences), len(origin_en_sentences)))
+
+    if os.path.exists(ghp.handled_zh_idx_file_name + ".npy"):
         train_zh_idx = np.load(ghp.handled_zh_idx_file_name + ".npy")
-        train_en_sentences, train_zh_sentences = load_train_sentences_data()
+    else:
+        train_zh_idx = create_train_data2(origin_zh_sentences)
+        np.save(ghp.handled_zh_idx_file_name, train_zh_idx)
+    print("生成训练数据：中文句子索引{}条成功！".format(len(train_zh_idx)))
 
     # check the en and zh has same length
-    if len(train_en_sentences) != len(train_zh_idx):
+    if len(origin_en_sentences) != len(train_zh_idx):
         raise ValueError("train data is wrong! please make sure the chinese data and english data has the same"
-                         " length.zh:{} vs en:{}".format(len(train_zh_idx), len(train_en_sentences)))
+                         " length.zh:{} vs en:{}".format(len(train_zh_idx), len(origin_en_sentences)))
 
     # make an iterator
     for i in range(int(len(train_zh_idx) / batch_size) + 1):
-        batch_en_sentences_data = train_en_sentences[i * batch_size: min(len(train_zh_idx), (i+1) * batch_size)]
+        batch_en_sentences_data = origin_en_sentences[i * batch_size: min(len(train_zh_idx), (i+1) * batch_size)]
         batch_zh_idx_data = train_zh_idx[i * batch_size: min(len(train_zh_idx), (i+1) * batch_size)]
         yield batch_en_sentences_data, batch_zh_idx_data
 
+
 if __name__ == "__main__":
     # get vocab
-    make_zh_vocab2(ghp.origin_zh_train_file, vocab_size=ghp.zh_vocab_size)
-    pass
+    # make_zh_vocab2(ghp.origin_zh_train_file, vocab_size=ghp.zh_vocab_size)
+    # make_zh_vocab(ghp.origin_zh_train_file, vocab_size=ghp.zh_vocab_size)
+    divide_data()
