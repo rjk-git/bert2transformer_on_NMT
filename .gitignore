@@ -1,0 +1,7 @@
+.idea
+/scripts/__pycache__/
+/scripts/data
+/scripts/logs
+/scripts/parameters
+/scripts/vocab
+/test
