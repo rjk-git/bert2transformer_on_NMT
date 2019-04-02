@@ -20,12 +20,14 @@ class DecoderLayer(nn.Block):
             zh_emb,
             zh_emb,
             zh_emb,
-            True,
+            True, # if causality, the future info will not be compute
             is_training)
 
         # context attention
         # query is decoder's outputs, key and value are encoder's inputs
+        query_masks = nd.broadcast_not_equal(zh_emb, nd.zeros_like(zh_emb, ctx=ghp.ctx))
 
+        dec_output = dec_output * query_masks
         dec_output = self.context_attention(
             dec_output,
             en_emb,

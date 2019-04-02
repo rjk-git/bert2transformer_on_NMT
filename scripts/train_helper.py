@@ -3,17 +3,18 @@ sys.path.append("..")
 import bert_embedding
 from models.Transformer import Transformer
 from mxnet import nd
-from prepo import get_data_loader2, load_zh_vocab, make_zh_vocab2
+from prepo import get_data_loader, load_ch_vocab, make_ch_vocab
 from hyperParameters import GetHyperParameters as ghp
 import numpy as np
 import mxnet as mx
 
+
 def translate():
-    zh2idx, idx2zh = load_zh_vocab()
+    zh2idx, idx2zh = load_ch_vocab()
 
     # build model and load parameters
     model = Transformer(zh2idx.__len__())
-    model.load_parameters("parameters/epoch0_batch5000_loss2.8857500553131104_acc0.42683982849121094.params", ctx=ghp.ctx)
+    model.load_parameters("parameters/epoch0_batch30000_loss1.1893165111541748_acc0.6940639019012451.params", ctx=ghp.ctx)
 
     while True:
         # get input english sentence
@@ -21,45 +22,48 @@ def translate():
         input_english = input("请输入英文句子：")
         if input_english == "exit":
             break
-        bert_result = bert([input_english])
 
-        # pre-process english sentence
-        seq_valid_len = len(bert_result[0][0])
-        en_idx = [[1] * seq_valid_len + [0] * (ghp.max_seq_len - seq_valid_len)]
-        en_idx_nd = nd.array(en_idx, ctx=ghp.ctx)
+        # 用bert对输入的英文句子进行初始化
+        result = bert([input_english])
+        all_sentences_emb = []
+        all_sentences_idx = []
+        real_batch_size = len([input_english])
+        for i in range(real_batch_size):
+            one_sent_emb = []
 
-        en_emb = []
-        # embedding
-        for word_emb in bert_result[0][1]:
-            en_emb.append(word_emb.tolist())
+            seq_valid_len = len(result[i][0])
+            one_sent_idx = [1] * seq_valid_len + [0] * (ghp.max_seq_len - seq_valid_len)
 
-        # padding
-        for n in range(ghp.max_seq_len - seq_valid_len):
-            en_emb.append([9e-10] * 768)
+            # embedding
+            for word_emb in result[i][1]:
+                one_sent_emb.append(word_emb.tolist())
 
-        en_emb_nd = nd.array([en_emb], ctx=ghp.ctx)
+            # padding
+            for n in range(ghp.max_seq_len - seq_valid_len):
+                one_sent_emb.append([9e-10] * 768)
 
-        # prepare init decoder input
-        dec_begin_input = [zh2idx["<bos>"]]
-        dec_begin_input.extend([zh2idx["<pad>"]] * (ghp.max_seq_len - 1))
-        dec_begin_input = nd.array(dec_begin_input, ctx=ghp.ctx)
-        dec_input = nd.expand_dims(dec_begin_input, axis=0)
+            all_sentences_emb.append(one_sent_emb)
+            all_sentences_idx.append(one_sent_idx)
 
-        # begin predict
-        zh_seq_len = 1
-        predict_token = []
+        # x_en_emb shape: (1, max_seq_len, 768)
+        # x_en_idx shape: (1, max_seq_len)
+        en_emb = nd.array(all_sentences_emb, ctx=ghp.ctx)
+        en_idx = nd.array(all_sentences_idx, ctx=ghp.ctx)
 
-        while True:
-            output = model(en_emb_nd, en_idx_nd, dec_input)
-            predict = nd.argmax(nd.softmax(output, axis=-1), axis=-1)
-            idx = int(predict[0][zh_seq_len-1].asscalar())
-            predict_token.append(idx2zh[idx])
+        # x_en_idx shape: (1, max_seq_len)
+        predict = nd.array([[2] + [0] * (ghp.max_seq_len - 1)], ctx=ghp.ctx)
 
-            dec_input[0][zh_seq_len] = idx
-            zh_seq_len += 1
-            if predict_token[-1] == "<eos>":
-                break
+        # test:
+        # test_sentence = "表演 的 压轴戏 是 闹剧 版 《 天鹅湖 》 ， 男女 小 人们 身着 粉红色 的 芭蕾舞 裙 扮演 小天鹅 。"
+        # test_idx = [zh2idx[word] for word in test_sentence.split()]
+        # test_idx_padded = test_idx + [0] * (ghp.max_seq_len - len(test_idx))
+        # predict = nd.array([test_idx_padded], ctx=ghp.ctx)
 
+        for n in range(ghp.max_seq_len):
+            output = model(en_emb, en_idx, predict, False)
+            predict_ = nd.argmax(nd.softmax(output, axis=-1), axis=-1)
+            predict[0][n] = predict_[0][n]
+        predict_token = [idx2zh[int(idx.asscalar())] for idx in predict[0]]
         print("translate:", "".join(predict_token))
 
 

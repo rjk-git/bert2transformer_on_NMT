@@ -7,25 +7,22 @@ class FeedForward(nn.Block):
     def __init__(self, **kwargs):
         super(FeedForward, self).__init__(**kwargs)
         with self.name_scope():
-            self.w1 = nn.Conv1D(in_channels=ghp.model_dim, channels=ghp.ffn_dim, kernel_size=1)
-            self.w2 = nn.Conv1D(in_channels=ghp.ffn_dim, channels=ghp.model_dim, kernel_size=1)
-            self.dropout = nn.Dropout(ghp.dropout)
-            self.layer_norm = nn.LayerNorm()
+            self.ffn_dense = nn.Dense(ghp.ffn_dim, activation="relu", use_bias=True, flatten=False)
+            self.model_dense = nn.Dense(ghp.model_dim, use_bias=True, flatten=False)
+            self.dropout = nn.Dropout(ghp.ffn_dropout)
+            self.layer_norm = nn.LayerNorm(axis=-1, epsilon=ghp.norm_epsilon)
 
     def forward(self, x, *args):
-        # x shape : (batch_size, seq_len, dim_model)
+        # x shape : (batch_size, seq_len, model_dim)
         residual = x
 
-        # shape : (batch_size, dim_model, seq_len)
-        output = nd.transpose(x, axes=(0, 2, 1))
+        # output shape : (batch_size, seq_len, ffn_dim)
+        output = self.ffn_dense(x)
 
-        # shape : (batch_size, dim_model, seq_len)
-        output = self.w2(nd.relu(self.w1(output)))
+        # output shape : (batch_size, seq_len, model_dim)
+        output = self.model_dense(output)
 
-        # shape : (batch_size, seq_len, dim_model)
-        output = nd.transpose(output, axes=(0, 2, 1))
-
-        # shape : (batch_size, seq_len, dim_model)
+        # shape : (batch_size, seq_len, model_dim)
         output = self.dropout(output)
 
         # add residual and norm layer

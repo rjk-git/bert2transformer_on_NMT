@@ -3,34 +3,25 @@ import mxnet as mx
 
 class GetHyperParameters(object):
     # data
-    origin_en_train_file = "./temp_data/origin.en.sentences.train.txt"
-    origin_zh_train_file = "./temp_data/origin.zh.sentences.train.txt"
+    origin_en_train_file = "./data/train.en.sentences"
+    origin_ch_train_file = "./data/train.ch.sentences"
 
-    origin_en_dev_file = "./temp_data/origin.en.sentences.dev.txt"
-    origin_zh_dev_file = "./temp_data/origin.zh.sentences.dev.txt"
+    origin_en_dev_file = "./data/dev.en.sentences"
+    origin_ch_dev_file = "./data/dev.ch.sentences"
 
-    origin_en_test_file = "./temp_data/origin.en.sentences.test.txt"
-    origin_zh_test_file = "./temp_data/origin.zh.sentences.test.txt"
+    origin_en_test_file = "./data/test.en.sentences"
+    origin_ch_test_file = "./data/test.ch.sentences"
 
-    handled_en_train_file = "./temp_data/handled.en.sentences.train.txt"
-    handled_zh_train_file = "./temp_data/handled.zh.sentences.train.txt"
+    train_ch_idx_file_name = "./data/train.ch.idx"
 
-    handled_en_dev_file = "./temp_data/handled.en.sentences.dev.txt"
-    handled_zh_dev_file = "./temp_data/handled.zh.sentences.dev.txt"
-
-    handled_en_test_file = "./temp_data/handled.en.sentences.test.txt"
-    handled_zh_test_file = "./temp_data/handled.zh.sentences.test.txt"
-
-    handled_zh_idx_file_name = "./temp_data/handled.zh.idx.train"
-
-    zh_vocab_file = "./vocab/zh_vocab.tsv"
+    ch_vocab_file = "./vocab/ch_vocab.tsv"
     en_vocab_file = "./vocab/en_vocab.tsv"
 
     # process corpus params
     min_count_vocab_size = 20
     max_seq_len = 25
-    en_vocab_size = 200000
-    zh_vocab_size = 250000
+    en_vocab_size = 100000
+    ch_vocab_size = 120000
 
     # model hyper params
     layer_num = 6
@@ -38,11 +29,20 @@ class GetHyperParameters(object):
     model_dim = 512
     c_dim = 64
     ffn_dim = 2048
-    dropout = 0.1
-    epsilon = 1e-8
+    dropout = 0.5
+    ffn_dropout = 0.5
+    attention_epsilon = 1e-8
+    norm_epsilon = 1e-6
 
     # train params
-    lr = 0.0001
-    batch_size = 128
+    batch_size = 64
     epoch_num = 25
     ctx = mx.gpu()
+
+    learning_rate = 16.0
+    learning_rate_decay_rate = 1.0
+    learning_rate_warmup_steps = 216000
+
+    optimizer_adam_beta1 = 0.9
+    optimizer_adam_beta2 = 0.997
+    optimizer_adam_epsilon = 1e-09
