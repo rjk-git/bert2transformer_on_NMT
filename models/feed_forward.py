@@ -1,5 +1,5 @@
-from mxnet import nd
 from mxnet.gluon import nn
+
 from hyperParameters import GetHyperParameters as ghp
 
 

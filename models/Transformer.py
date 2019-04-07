@@ -1,5 +1,6 @@
 from mxnet.gluon import nn
 from models.Decoder import Decoder
+
 from hyperParameters import GetHyperParameters as ghp
 
 
@@ -29,4 +30,5 @@ class Transformer(nn.Block):
 
         # output shape : (batch_size, max_seq_len, ch_vocab_size)
         output = self.linear(output)
+        # print(output)
         return output

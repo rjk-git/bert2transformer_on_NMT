@@ -20,8 +20,7 @@ def main():
     # build model
     model = Transformer(ghp.ch_vocab_size + 4)
     # model.initialize(init=init.Xavier(), force_reinit=True, ctx=ghp.ctx)
-    model.load_parameters("parameters/epoch1_batch15000_loss0.43608570098876953_acc0.8996627330780029.params",
-                          ctx=ghp.ctx)
+    model.load_parameters("./parameters/epoch0_batch18000_loss1.301_acc0.433.params", ctx=ghp.ctx)
 
     # train and valid
     train_and_valid(model)
@@ -38,6 +37,7 @@ def get_learning_rate(learning_rate, hidden_size, learning_rate_warmup_steps, gl
     learning_rate = (np.maximum(step, warmup_steps) ** -0.5) * learning_rate
 
     return learning_rate
+
 
 def train_and_valid(transformer_model):
     loss = gloss.SoftmaxCrossEntropyLoss()
@@ -70,7 +70,7 @@ def train_and_valid(transformer_model):
                 one_sent_emb = []
 
                 seq_valid_len = len(result[i][0])
-                one_sent_idx = [1] * seq_valid_len + [0] * (ghp.max_seq_len - seq_valid_len)
+                one_sent_idx = [1] * (seq_valid_len) + [0] * (ghp.max_seq_len - seq_valid_len)
 
                 # embedding
                 for word_emb in result[i][1]:
@@ -78,13 +78,13 @@ def train_and_valid(transformer_model):
 
                 # padding
                 for n in range(ghp.max_seq_len - seq_valid_len):
-                    one_sent_emb.append([9e-10] * 768)
+                    one_sent_emb.append([1e-9] * 768)
 
                 all_sentences_emb.append(one_sent_emb)
                 all_sentences_idx.append(one_sent_idx)
 
-            x_en_emb = nd.array(all_sentences_emb)
-            x_en_idx = nd.array(all_sentences_idx)
+            x_en_emb = nd.array(all_sentences_emb, ctx=ghp.ctx)
+            x_en_idx = nd.array(all_sentences_idx, ctx=ghp.ctx)
 
             y_zh_idx = zh_idxs
 
@@ -107,7 +107,7 @@ def train_and_valid(transformer_model):
             print("loss:{0}, acc:{1}".format(str(loss_scalar)[:5], str(acc_scalar)[:5]))
             print("\n")
 
-            if count % 5000 == 0:
+            if count % 3000 == 0:
                 if not os.path.exists("parameters"):
                     os.makedirs("parameters")
                 model_params_file = "parameters/" + "epoch{}_batch{}_loss{}_acc{}.params".format(epoch, count, str(loss_scalar)[:5], str(acc_scalar)[:5])
@@ -118,22 +118,17 @@ def batch_loss(transformer_model, en_sentences, x_en_emb, x_en_idx, y_zh_idx, lo
     batch_size = x_en_emb.shape[0]
     ch2idx, idx2ch = load_ch_vocab()
 
-    # make [sentence] + [<eos>] ==> [<bos>] + [sentence]
-    dec_input_zh_idx = []
-    for i in range(batch_size):
-        y_zh_idx_np = y_zh_idx[i]
-        eos_idx = np.argwhere(y_zh_idx_np == ch2idx["<eos>"])[0]
-        y_zh_idx_np = np.delete(y_zh_idx_np, eos_idx, axis=0)
-        y_zh_idx_np = np.insert(y_zh_idx_np, 0,  ch2idx["<bos>"], axis=0)
-        dec_input_zh_idx.append(y_zh_idx_np.tolist())
+    y_zh_idx_nd = nd.array(y_zh_idx, ctx=ghp.ctx)
+    dec_input_zh_idx = nd.concat(nd.ones(shape=y_zh_idx_nd[:, :1].shape, ctx=ghp.ctx) * 2, y_zh_idx_nd[:, :-1], dim=1)
 
-    x_en_emb = x_en_emb.as_in_context(ghp.ctx)
-    x_en_idx = x_en_idx.as_in_context(ghp.ctx)
-    dec_input_zh_idx = nd.array(dec_input_zh_idx, ghp.ctx)
+    x_en_emb = x_en_emb
+    x_en_idx = x_en_idx
 
     output = transformer_model(x_en_emb, x_en_idx, dec_input_zh_idx, True)
     predict = nd.argmax(nd.softmax(output, axis=-1), axis=-1)
 
+    # print("input_idx:", dec_input_zh_idx[0])
+    # print("predict_idx:", predict[0])
     print("source:", en_sentences[0])
 
     label_token = []
@@ -146,15 +141,16 @@ def batch_loss(transformer_model, en_sentences, x_en_emb, x_en_idx, y_zh_idx, lo
         predict_token.append(idx2ch[int(predict[0][n].asscalar())])
     print("predict:", "".join(predict_token))
 
-    y_zh_idx = nd.array(y_zh_idx, ghp.ctx)
-    is_target = nd.not_equal(y_zh_idx, 0)
-    current = nd.equal(y_zh_idx, predict) * is_target
+    is_target = nd.not_equal(y_zh_idx_nd, 0)
+    # print(is_target)
+    current = nd.equal(y_zh_idx_nd, predict) * is_target
     acc = nd.sum(current) / nd.sum(is_target)
 
-    l = loss(output, y_zh_idx)
+    l = loss(output, y_zh_idx_nd)
     l_mean = nd.sum(l) / batch_size
 
     return l_mean, acc
+
 
 if __name__ == "__main__":
     main()

@@ -78,7 +78,7 @@ def make_ch_vocab_cut(file_path, vocab_size=None):
     print("获取：{}个词汇".format(len(words)))
     if vocab_size is not None:
         print("词典：{}个词汇".format(vocab_size))
-    counter = Counter(words)
+        counter = Counter(words)
     if vocab_size is None:
         vocab_size = len(counter)
     if not os.path.exists("vocab"):
