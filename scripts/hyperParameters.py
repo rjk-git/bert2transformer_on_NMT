@@ -29,8 +29,8 @@ class GetHyperParameters(object):
     model_dim = 512
     c_dim = 64
     ffn_dim = 2048
-    dropout = 0.5
-    ffn_dropout = 0.5
+    dropout = 0.3
+    ffn_dropout = 0.3
     attention_epsilon = 1e-9
     norm_epsilon = 1e-6
 

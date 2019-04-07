@@ -19,8 +19,8 @@ sw = SummaryWriter(logdir='./logs', flush_secs=5)
 def main():
     # build model
     model = Transformer(ghp.ch_vocab_size + 4)
-    # model.initialize(init=init.Xavier(), force_reinit=True, ctx=ghp.ctx)
-    model.load_parameters("./parameters/epoch0_batch18000_loss1.301_acc0.433.params", ctx=ghp.ctx)
+    model.initialize(init=init.Xavier(), force_reinit=True, ctx=ghp.ctx)
+    # model.load_parameters("./parameters/epoch0_batch18000_loss1.301_acc0.433.params", ctx=ghp.ctx)
 
     # train and valid
     train_and_valid(model)
