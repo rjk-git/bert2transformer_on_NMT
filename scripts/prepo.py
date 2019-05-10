@@ -7,6 +7,7 @@ from hyperParameters import GetHyperParameters as ghp
 from scripts.utils import word_piece_tokenizer
 from tqdm import tqdm
 from mxnet import nd
+import random
 
 
 def divide_data():
@@ -38,8 +39,15 @@ def load_origin_sentences_data():
     en_origin = open(ghp.origin_en_train_file, "r", encoding="utf-8").readlines()
     zh_origin = open(ghp.origin_ch_train_file, "r", encoding="utf-8").readlines()
 
+    # randnum = random.randint(0, 100)
+
     en_sentences = [sent.replace("\n", "") for sent in en_origin]
+    # random.seed(randnum)
+    # random.shuffle(en_sentences)
+
     zh_sentences = [sent.replace("\n", "") for sent in zh_origin]
+    # random.seed(randnum)
+    # random.shuffle(zh_sentences)
 
     return en_sentences, zh_sentences
 
@@ -127,7 +135,7 @@ def create_train_data_cut(en_sentences, zh_sentences):
     ens = word_piece_tokenizer(en_sentences)
     for i, (en_sentence, zh_sentence) in enumerate(zip(en_sentences, zh_sentences)):
         zh = [ch2idx.get(word, 1) for word in (" ".join([w for w in jieba.cut(zh_sentence)]) + " <eos>").split()]
-        if len(ens[i]) <= ghp.max_seq_len and len(zh) <= ghp.max_seq_len:
+        if len(ens[i]) <= ghp.max_seq_len and len(zh) <= ghp.max_seq_len - 1:
             en_list.append(ens[i])
             zh_list.append(zh)
             train_en_sentences.append(en_sentence)
@@ -190,7 +198,85 @@ def get_data_loader_cut():
         yield batch_en_sentences_data, batch_zh_idx_data
 
 
-def get_data_loader():
+def get_train_data_loader():
+    batch_size = ghp.batch_size
+    print("#######开始加载训练数据：英文， 中文（已分词）#########")
+
+    print("(1/4)开始创建词典...")
+    if os.path.exists(ghp.ch_vocab_file):
+        print("字典存在，正在获取...")
+        ch2idx, _ = load_ch_vocab()
+    else:
+        make_ch_vocab(ghp.origin_ch_train_file)
+        ch2idx, _  = load_ch_vocab()
+    print("成功！词典大小{}".format(ghp.ch_vocab_size))
+
+    print("(2/4)获取训练数据...")
+    origin_en_sentences, origin_ch_sentences = load_origin_sentences_data()
+    print("成功！中文{}条句子，英文{}条句子".format(len(origin_ch_sentences), len(origin_en_sentences)))
+
+    print("(3/4)生成中文句子索引数据...")
+    if os.path.exists(ghp.train_ch_idx_file_name + ".npy"):
+        train_zh_idx = np.load(ghp.train_ch_idx_file_name + ".npy")
+        print("成功！中文句子索引{}条".format(len(train_zh_idx)))
+        print("(4/4)PAD数据到最大长度{}...".format(ghp.max_seq_len))
+        print("成功！PAD中文句子索引{}条".format(len(train_zh_idx)))
+    else:
+        train_zh_idx = create_train_data(origin_ch_sentences, ch2idx)
+        np.save(ghp.train_ch_idx_file_name, train_zh_idx)
+
+    # check the en and zh has same length
+    if len(origin_en_sentences) != len(train_zh_idx):
+        raise ValueError("train data is wrong! please make sure the chinese data and english data has the same"
+                         " length.zh:{} vs en:{}".format(len(train_zh_idx), len(origin_en_sentences)))
+
+    # make an iterator
+    for i in range(int(len(train_zh_idx) / batch_size) + 1):
+        batch_en_sentences_data = origin_en_sentences[i * batch_size: min(len(train_zh_idx), (i+1) * batch_size)]
+        batch_zh_idx_data = train_zh_idx[i * batch_size: min(len(train_zh_idx), (i+1) * batch_size)]
+        yield batch_en_sentences_data, batch_zh_idx_data
+
+
+def get_valid_data_loader():
+    batch_size = ghp.batch_size
+    print("#######开始加载训练数据：英文， 中文（已分词）#########")
+
+    print("(1/4)开始创建词典...")
+    if os.path.exists(ghp.ch_vocab_file):
+        ch2idx, _ = load_ch_vocab()
+    else:
+        make_ch_vocab(ghp.origin_ch_train_file)
+        ch2idx, _  = load_ch_vocab()
+    print("成功！词典大小{}".format(ghp.ch_vocab_size))
+
+
+    print("(2/4)获取训练数据...")
+    origin_en_sentences, origin_ch_sentences = load_origin_sentences_data()
+    print("成功！中文{}条句子，英文{}条句子".format(len(origin_ch_sentences), len(origin_en_sentences)))
+
+    print("(3/4)生成中文句子索引数据...")
+    if os.path.exists(ghp.train_ch_idx_file_name + ".npy"):
+        train_zh_idx = np.load(ghp.train_ch_idx_file_name + ".npy")
+        print("成功！中文句子索引{}条".format(len(train_zh_idx)))
+        print("(4/4)PAD数据到最大长度{}...".format(ghp.max_seq_len))
+        print("成功！PAD中文句子索引{}条".format(len(train_zh_idx)))
+    else:
+        train_zh_idx = create_train_data(origin_ch_sentences, ch2idx)
+        np.save(ghp.train_ch_idx_file_name, train_zh_idx)
+
+    # check the en and zh has same length
+    if len(origin_en_sentences) != len(train_zh_idx):
+        raise ValueError("train data is wrong! please make sure the chinese data and english data has the same"
+                         " length.zh:{} vs en:{}".format(len(train_zh_idx), len(origin_en_sentences)))
+
+    # make an iterator
+    for i in range(int(len(train_zh_idx) / batch_size) + 1):
+        batch_en_sentences_data = origin_en_sentences[i * batch_size: min(len(train_zh_idx), (i+1) * batch_size)]
+        batch_zh_idx_data = train_zh_idx[i * batch_size: min(len(train_zh_idx), (i+1) * batch_size)]
+        yield batch_en_sentences_data, batch_zh_idx_data
+
+
+def get_test_data_loader():
     batch_size = ghp.batch_size
     print("#######开始加载训练数据：英文， 中文（已分词）#########")
 

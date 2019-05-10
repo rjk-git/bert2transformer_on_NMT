@@ -5,12 +5,13 @@ from models.Transformer import Transformer
 from mxnet import gluon
 from mxnet.gluon import loss as gloss
 from mxnet import autograd, nd, init
-from prepo import get_data_loader, load_ch_vocab, make_ch_vocab
+from prepo import get_train_data_loader, load_ch_vocab
 from hyperParameters import GetHyperParameters as ghp
 import os
 import bert_embedding
 from mxboard import *
 import mxnet as mx
+from scripts.train_helper import compute_bleu
 
 
 sw = SummaryWriter(logdir='./logs', flush_secs=5)
@@ -20,7 +21,7 @@ def main():
     # build model
     model = Transformer(ghp.ch_vocab_size + 4)
     model.initialize(init=init.Xavier(), force_reinit=True, ctx=ghp.ctx)
-    # model.load_parameters("./parameters/epoch0_batch18000_loss1.301_acc0.433.params", ctx=ghp.ctx)
+    # model.load_parameters("./parameters/epoch0_batch95000_loss2.059_acc0.302.params", ctx=ghp.ctx)
 
     # train and valid
     train_and_valid(model)
@@ -41,24 +42,30 @@ def get_learning_rate(learning_rate, hidden_size, learning_rate_warmup_steps, gl
 
 def train_and_valid(transformer_model):
     loss = gloss.SoftmaxCrossEntropyLoss()
-    bert = bert_embedding.BertEmbedding(ctx=ghp.ctx)
+    bert = bert_embedding.BertEmbedding(model='bert_12_768_12', dataset_name='wiki_cn_cased', ctx=ghp.ctx)
+
+    lr0 = ghp.adam_learning_rate
+    decay_rate = 0.9
     global_step = 0
+    decay_step = 300
+    optimizer = mx.optimizer.Adam(learning_rate=lr0)
+
+    # global_step = 0
+    # learning_rate = get_learning_rate(ghp.learning_rate, ghp.model_dim, ghp.learning_rate_warmup_steps,
+    #                                 global_step)
+    # optimizer = mx.optimizer.Adam(learning_rate=learning_rate, beta1=ghp.optimizer_adam_beta1,
+    #                           beta2=ghp.optimizer_adam_beta2, epsilon=ghp.optimizer_adam_epsilon)
+
+    model_trainer = gluon.Trainer(transformer_model.collect_params(), optimizer)
+
     for epoch in range(ghp.epoch_num):
-        train_data_loader = get_data_loader()
+        train_data_loader = get_train_data_loader()
         print("********开始训练********")
-
-        learning_rate = get_learning_rate(ghp.learning_rate, ghp.model_dim, ghp.learning_rate_warmup_steps,
-                                          global_step)
-        optimizer = mx.optimizer.Adam(learning_rate=learning_rate, beta1=ghp.optimizer_adam_beta1,
-                                      beta2=ghp.optimizer_adam_beta2, epsilon=ghp.optimizer_adam_epsilon)
-
-        model_trainer = gluon.Trainer(transformer_model.collect_params(), optimizer)
-
         count = 0
-        last_acc = 0
         for en_sentences, zh_idxs in train_data_loader:
-            learning_rate = get_learning_rate(ghp.learning_rate, ghp.model_dim, ghp.learning_rate_warmup_steps,
-                                              global_step)
+            # learning_rate = get_learning_rate(ghp.learning_rate, ghp.model_dim, ghp.learning_rate_warmup_steps,
+            #                                 global_step)
+
             count += 1
             print("现在是第{}个epoch（总计{}个epoch），第{}批数据。(lr:{}s)"
                   .format(epoch + 1, ghp.epoch_num, count, model_trainer.learning_rate))
@@ -96,21 +103,23 @@ def train_and_valid(transformer_model):
             sw.add_scalar(tag='acc', value=acc_scalar, global_step=global_step)
             global_step += 1
             loss_mean.backward()
-            model_trainer.set_learning_rate(learning_rate)
-            if acc_scalar > 0.3:
-                acc_diff = acc_scalar - last_acc
-                last_acc = acc_scalar
-                if acc_diff > 0.1:
-                    print("上一步acc:{},此步acc:{},差值为{}过大，放弃更新参数。".format(str(last_acc)[:5], str(acc_scalar)[:5], str(acc_diff)[:5]))
-                    continue
+            decayed_lr = lr0 * (decay_rate ** (global_step / decay_step))
+            model_trainer.set_learning_rate(decayed_lr)
+
+            # if acc_scalar > 0.3:
+            #     acc_diff = acc_scalar - last_acc
+            #     last_acc = acc_scalar
+            #     if acc_diff > 0.1:
+            #         print("上一步acc:{},此步acc:{},差值为{}过大，放弃更新参数。".format(str(last_acc)[:5], str(acc_scalar)[:5], str(acc_diff)[:5]))
+            #         continue
             model_trainer.step(1)
             print("loss:{0}, acc:{1}".format(str(loss_scalar)[:5], str(acc_scalar)[:5]))
             print("\n")
 
-            if count % 3000 == 0:
+            if count % 5000 == 0:
                 if not os.path.exists("parameters"):
                     os.makedirs("parameters")
-                model_params_file = "parameters/" + "epoch{}_batch{}_loss{}_acc{}.params".format(epoch, count, str(loss_scalar)[:5], str(acc_scalar)[:5])
+                model_params_file = "parameters/" + "re_epoch{}_batch{}_loss{}_acc{}.params".format(epoch, count, str(loss_scalar)[:5], str(acc_scalar)[:5])
                 transformer_model.save_parameters(model_params_file)
 
 

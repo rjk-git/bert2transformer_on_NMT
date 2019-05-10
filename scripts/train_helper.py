@@ -5,7 +5,7 @@ import bert_embedding
 from mxnet import nd
 from models.Transformer import Transformer
 
-from prepo import get_data_loader, load_ch_vocab, make_ch_vocab
+from prepo import get_train_data_loader, load_ch_vocab, make_ch_vocab
 from hyperParameters import GetHyperParameters as ghp
 
 
@@ -14,7 +14,7 @@ def translate():
 
     # build model and load parameters
     model = Transformer(zh2idx.__len__())
-    model.load_parameters("parameters/epoch0_batch18000_loss1.301_acc0.433.params", ctx=ghp.ctx)
+    model.load_parameters("parameters/re_epoch0_batch80000_loss1.621_acc0.355.params", ctx=ghp.ctx)
 
     while True:
         # get input english sentence
@@ -61,6 +61,11 @@ def translate():
         predict_token = [idx2zh[int(idx.asscalar())] for idx in predict[0]]
         print("translate:", "".join(predict_token))
 
+
+def compute_bleu(reference, candidate):
+    smooth = SmoothingFunction()
+    score = corpus_bleu(reference, candidate, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=smooth.method7)
+    print(score)
 
 if __name__ == '__main__':
     translate()
