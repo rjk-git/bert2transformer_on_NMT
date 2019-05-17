@@ -62,10 +62,5 @@ def translate():
         print("translate:", "".join(predict_token))
 
 
-def compute_bleu(reference, candidate):
-    smooth = SmoothingFunction()
-    score = corpus_bleu(reference, candidate, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=smooth.method7)
-    print(score)
-
 if __name__ == '__main__':
     translate()

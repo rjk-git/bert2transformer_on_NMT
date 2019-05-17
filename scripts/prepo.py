@@ -1,38 +1,12 @@
-import numpy as np
 import os
-import re
 import jieba
+import numpy as np
+
+from tqdm import tqdm
 from collections import Counter
+
 from hyperParameters import GetHyperParameters as ghp
 from scripts.utils import word_piece_tokenizer
-from tqdm import tqdm
-from mxnet import nd
-import random
-
-
-def divide_data():
-    first_file = open("./temp_data/" + os.listdir("./temp_data/")[0], "r", encoding="utf-8")
-    lines = first_file.readlines()
-    en_list = []
-    zh_list = []
-    for line in lines:
-        en_list.append(line.split("\t")[0])
-        en_list.append("\n")
-        zh_list.append(line.split("\t")[1].replace("\n", ""))
-        zh_list.append("\n")
-    open(ghp.origin_en_train_file, "w", encoding="utf-8").writelines(en_list)
-    open(ghp.origin_zh_train_file, "w", encoding="utf-8").writelines(zh_list)
-
-
-def load_en_vocab():
-    vocab = [line.split("\t")[0] for line in open(ghp.en_vocab_file, "r", encoding="utf-8").readlines()
-             if int(line.split("\t")[1].replace("\n", "")) >= ghp.min_count_vocab_size]
-    word2idx = {word: idx for idx, word in enumerate(vocab)}
-    idx2word = {idx: word for idx, word in enumerate(vocab)}
-    return word2idx, idx2word
-
-
-# ----------------------------------------------------------------------- #
 
 
 def load_origin_sentences_data():
