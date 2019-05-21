@@ -19,9 +19,9 @@ class GetHyperParameters(object):
 
     # process corpus params
     min_count_vocab_size = 18
-    max_seq_len = 200
+    max_seq_len = 25
     en_vocab_size = 120000
-    ch_vocab_size = 60000
+    ch_vocab_size = 80000
 
     # model hyper params
     layer_num = 6
@@ -33,9 +33,10 @@ class GetHyperParameters(object):
     ffn_dropout = 0.5
     attention_epsilon = 1e-9
     norm_epsilon = 1e-6
+    dtype="float32"
 
     # train params
-    batch_size = 32
+    batch_size = 64
     epoch_num = 25
     ctx = mx.gpu()
 

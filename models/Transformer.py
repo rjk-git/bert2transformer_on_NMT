@@ -47,7 +47,7 @@ class Encoder(nn.Block):
     def __init__(self, **kwargs):
         super(Encoder, self).__init__(**kwargs)
         self.ctx = ghp.ctx
-        self.max_seq_length = ghp.max_seq_len_left
+        self.max_seq_length = ghp.max_seq_len
         self.batch_size = ghp.batch_size
         self.bert, self.vocab = gluonnlp.model.get_model('bert_12_768_12',
                                                          dataset_name='wiki_cn_cased',
