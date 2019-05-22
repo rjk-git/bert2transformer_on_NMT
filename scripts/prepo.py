@@ -181,7 +181,7 @@ def padder(seq):
         seq_pad = np.lib.pad(seq, (0, ghp.max_seq_len - len(seq)), 'constant', constant_values=(0, 0))
     except:
         seq_pad = seq[: ghp.max_seq_len-1]
-        seq_pad.append(2)
+        seq_pad.append(3)
         need_cut_sentences_num = need_cut_sentences_num + 1
         return seq_pad
     return seq_pad
@@ -193,9 +193,9 @@ def indexer(ch_sentence):
     for word in (ch_sentence + " <eos>").split():
         flag = ch2idx.get(word, 1)
         if flag == 1:
-            idx.append(1)
-            # for char in word:
-            #     idx.append(ch2idx.get(char, 1))
+            # idx.append(1)
+            for char in word:
+                idx.append(ch2idx.get(char, 1))
         else:
             idx.append(flag)
     return idx

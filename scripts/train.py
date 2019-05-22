@@ -21,7 +21,7 @@ def main():
     word2idx, _ = load_ch_vocab()
     model = Transformer(len(word2idx))
 
-    # model.load_parameters("./parameters/epoch0_batch60000_loss5.463_acc0.197.params", ctx=ghp.ctx)
+    # model.load_parameters("./parameters/*****.params", ctx=ghp.ctx)
 
     model.decoder.initialize(init=init.Xavier(), ctx=ghp.ctx)
     model.en_input_dense.initialize(init=init.Xavier(), ctx=ghp.ctx)
@@ -31,28 +31,18 @@ def main():
     train_and_valid(model)
 
 
-def get_learning_rate(global_step):
-    learning_rate = 0.0001
-    # learning_rate_highest = 0.0002
-    # learning_rate_lowest = 0.0001
-    # decay_rate = 0.95
-    # decay_step = 5
-    # warm_up_step = 1000
-    # if learning_rate < learning_rate_highest:
-    #     learning_rate = learning_rate_highest * (global_step / warm_up_step)
-    # else:
-    #     warm_up_step = warm_up_step * 2
-    #     learning_rate = learning_rate_highest * (global_step / warm_up_step)
+def get_learning_rate(step_num, warm_up_step=4000, d_model=ghp.model_dim):
+    learning_rate = pow(d_model, -0.5) * min(pow(step_num, -0.5), (step_num * pow(warm_up_step, -1.5)))
     return learning_rate
 
 
 def train_and_valid(transformer_model):
     loss = gloss.SoftmaxCrossEntropyLoss()
-    global_step = 0
+    global_step = 1
     learning_rate = get_learning_rate(global_step)
     optimizer = mx.optimizer.Adam(learning_rate=learning_rate)
 
-    bert_optimizer = mx.optimizer.Adam(learning_rate=3e-5)
+    bert_optimizer = mx.optimizer.Adam(learning_rate=2e-5)
 
     bert_trainer = gluon.Trainer(transformer_model.encoder.collect_params(), bert_optimizer)
     model_trainer = gluon.Trainer(transformer_model.collect_params(select="decoder0_*|en_input_dense0_*|linear0_*"), optimizer)
@@ -87,7 +77,7 @@ def train_and_valid(transformer_model):
             if count % 5000 == 0:
                 if not os.path.exists("parameters"):
                     os.makedirs("parameters")
-                model_params_file = "parameters/" + "re2_epoch{}_batch{}_loss{}_acc{}.params".format(epoch, count, str(loss_scalar)[:5], str(acc_scalar)[:5])
+                model_params_file = "parameters/" + "re3_epoch{}_batch{}_loss{}_acc{}.params".format(epoch, count, str(loss_scalar)[:5], str(acc_scalar)[:5])
                 transformer_model.save_parameters(model_params_file)
 
 
