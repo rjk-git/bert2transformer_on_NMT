@@ -1,17 +1,18 @@
 import sys
 sys.path.append("..")
+import os
+import bert_embedding
 import numpy as np
-from models.Transformer import Transformer
+import mxnet as mx
+
 from mxnet import gluon
 from mxnet.gluon import loss as gloss
 from mxnet import autograd, nd, init
+from mxboard import *
+
 from prepo import get_train_data_loader, load_ch_vocab
 from hyperParameters import GetHyperParameters as ghp
-import os
-import bert_embedding
-from mxboard import *
-import mxnet as mx
-
+from models.Transformer import Transformer
 
 sw = SummaryWriter(logdir='./logs', flush_secs=5)
 
