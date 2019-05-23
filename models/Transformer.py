@@ -21,9 +21,11 @@ class Transformer(nn.Block):
 
         with self.name_scope():
 
-            self.en_input_dense = nn.Dense(ghp.model_dim, use_bias=False, flatten=False, dtype=ghp.dtype)
+            self.en_input_dense = nn.Dense(
+                ghp.model_dim, use_bias=False, flatten=False, dtype=ghp.dtype)
 
-            self.linear = nn.Dense(ch_vocab_size, use_bias=False, flatten=False, dtype=ghp.dtype)
+            self.linear = nn.Dense(
+                ch_vocab_size, use_bias=False, flatten=False, dtype=ghp.dtype)
 
     def forward(self, sentences_left, idx_right, is_training):
         # en_emb shape : (batch_size, en_max_len, en_word_dim)
@@ -50,44 +52,36 @@ class Encoder(nn.Block):
         self.max_seq_length = ghp.max_seq_len
         self.batch_size = ghp.batch_size
         self.bert, self.vocab = gluonnlp.model.get_model('bert_12_768_12',
-                                                         dataset_name='wiki_cn_cased',
+                                                         dataset_name='book_corpus_wiki_en_uncased',
                                                          pretrained=True, ctx=self.ctx,
                                                          use_pooler=False,
                                                          use_decoder=False,
                                                          use_classifier=False)
 
     def forward(self, sentences, oov_way='avg', *args):
-        data_iter = self.data_loader(sentences=sentences)
-        for token_ids, valid_length, token_types in data_iter:
-            token_ids_list = []
-            valid_length_list = []
-            for token_id, valid_len in zip(token_ids, valid_length):
-                list_a = token_id[1:].asnumpy().tolist()
-                list_a.extend([1])
-                token_id = list_a
-                token_id[int(valid_len.asscalar()) - 2] = 1
-                token_ids_list.append(token_id)
-                valid_length_list.append(int(valid_len.asscalar()) - 2)
-            token_ids = nd.array(token_ids_list, ctx=self.ctx)
-            valid_length = nd.array(valid_length_list, ctx=self.ctx)
-            token_types = token_types.as_in_context(self.ctx)
-            sequence_outputs = self.bert(token_ids, token_types,
-                                         valid_length)
-
-            zeros = nd.zeros_like(token_ids)
-            token_ids = nd.where(nd.equal(token_ids, 1), zeros, token_ids)
-
-            ones = nd.ones_like(sequence_outputs) * 1e-9
-            sequence_outputs = nd.where(nd.equal(sequence_outputs, 0), ones, sequence_outputs)
-            return sequence_outputs, token_ids
-
-    def data_loader(self, sentences):
         tokenizer = BERTTokenizer(self.vocab)
         transform = BERTSentenceTransform(tokenizer=tokenizer,
                                           max_seq_length=self.max_seq_length,
                                           pair=False)
-        dataset = BertEmbeddingDataset(sentences, transform)
-        return DataLoader(dataset=dataset, batch_size=self.batch_size)
+        data_set = BertEmbeddingDataset(sentences, transform)
+        token_ids = []
+        valid_lengths = []
+        token_types = []
+        for token_id, valid_length, token_type in data_set:
+            token_ids.append(token_id.tolist())
+            valid_lengths.append(valid_length.tolist())
+            token_types.append(token_type.tolist())
+
+        token_ids = nd.array(token_ids, ctx=ghp.ctx)
+        valid_lengths = nd.array(valid_lengths, ctx=ghp.ctx)
+        token_types = nd.array(token_types, ctx=ghp.ctx)
+
+        sequence_outputs = self.bert(token_ids, token_types, valid_lengths)
+
+        zeros = nd.zeros_like(token_ids)
+        token_ids = nd.where(nd.equal(token_ids, 1), zeros, token_ids)
+
+        return sequence_outputs, token_ids
 
 
 class Decoder(nn.Block):
@@ -101,7 +95,8 @@ class Decoder(nn.Block):
                 self.register_child(sub_layer)
                 self.decoder_layers.append(sub_layer)
 
-            self.seq_embedding = nn.Embedding(ch_vocab_size, ghp.model_dim, dtype=ghp.dtype)
+            self.seq_embedding = nn.Embedding(
+                ch_vocab_size, ghp.model_dim, dtype=ghp.dtype)
 
     def forward(self, en_emb, en_idx, zh_idx, is_training):
         output = self.seq_embedding(zh_idx)
@@ -118,16 +113,21 @@ class Decoder(nn.Block):
         dec_output = zh_emb
 
         for sub_layer in self.decoder_layers:
-            dec_output = sub_layer(en_emb, dec_output, mask, self_mask, is_training)
+            dec_output = sub_layer(
+                en_emb, dec_output, mask, self_mask, is_training)
         return dec_output
 
     @staticmethod
     def _get_position_encoding(length, min_timescale=1.0, max_timescale=1.0e4):
         position = nd.arange(length, ctx=ghp.ctx, dtype=ghp.dtype)
         num_timescales = ghp.model_dim // 2
-        log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (float(num_timescales) - 1))
-        inv_timescales = min_timescale * nd.exp(nd.arange(num_timescales, ctx=ghp.ctx, dtype=ghp.dtype) * -log_timescale_increment)
-        scaled_time = nd.expand_dims(position, 1) * nd.expand_dims(inv_timescales, 0)
+        log_timescale_increment = (math.log(
+            float(max_timescale) / float(min_timescale)) / (float(num_timescales) - 1))
+        inv_timescales = min_timescale * \
+            nd.exp(nd.arange(num_timescales, ctx=ghp.ctx,
+                             dtype=ghp.dtype) * -log_timescale_increment)
+        scaled_time = nd.expand_dims(
+            position, 1) * nd.expand_dims(inv_timescales, 0)
         signal = nd.concat(nd.sin(scaled_time), nd.cos(scaled_time), dim=1)
         return signal
 
@@ -168,9 +168,12 @@ class MultiHeadAttention(nn.Block):
     def __init__(self, **kwargs):
         super(MultiHeadAttention, self).__init__(**kwargs)
         with self.name_scope():
-            self.queries_dense = nn.Dense(ghp.model_dim, use_bias=False, flatten=False)
-            self.keys_dense = nn.Dense(ghp.model_dim, use_bias=False, flatten=False)
-            self.values_dense = nn.Dense(ghp.model_dim, use_bias=False, flatten=False)
+            self.queries_dense = nn.Dense(
+                ghp.model_dim, use_bias=False, flatten=False)
+            self.keys_dense = nn.Dense(
+                ghp.model_dim, use_bias=False, flatten=False)
+            self.values_dense = nn.Dense(
+                ghp.model_dim, use_bias=False, flatten=False)
             self.dropout = nn.Dropout(ghp.dropout)
             self.LayerNorm = nn.LayerNorm(epsilon=ghp.norm_epsilon)
 
@@ -207,7 +210,7 @@ class MultiHeadAttention(nn.Block):
         # K_ shape (batch_size * num_head, k_len, c_dim)
         K_ = nd.empty(shape=(1, k_len, c_dim), ctx=ghp.ctx)
         for k in Ks:
-            K_ =  nd.concat(K_, k, dim=0)
+            K_ = nd.concat(K_, k, dim=0)
         K_ = K_[1:]
 
         # V_ shape (batch_size * num_head, k_len, c_dim)
@@ -262,8 +265,10 @@ class FeedForward(nn.Block):
     def __init__(self, **kwargs):
         super(FeedForward, self).__init__(**kwargs)
         with self.name_scope():
-            self.ffn_dense = nn.Dense(ghp.ffn_dim, activation="relu", use_bias=True, flatten=False, dtype=ghp.dtype)
-            self.model_dense = nn.Dense(ghp.model_dim, use_bias=True, flatten=False, dtype=ghp.dtype)
+            self.ffn_dense = nn.Dense(
+                ghp.ffn_dim, activation="relu", use_bias=True, flatten=False, dtype=ghp.dtype)
+            self.model_dense = nn.Dense(
+                ghp.model_dim, use_bias=True, flatten=False, dtype=ghp.dtype)
             self.dropout = nn.Dropout(ghp.ffn_dropout)
             self.layer_norm = nn.LayerNorm(axis=-1, epsilon=ghp.norm_epsilon)
 

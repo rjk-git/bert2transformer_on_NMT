@@ -1,51 +1,27 @@
-import gluonnlp
+def get_data():
+    en_sentences = open(
+        r"../data/UN(已分词)/(un_parallel_en)origin.en.sentences.train.txt", "r", encoding="utf-8").readlines()
+    ch_sentences = open(
+        r"../data/UN(已分词)/(un_parallel_ch)origin.ch.sentences.train.txt", "r", encoding="utf-8").readlines()
+    en_sentences_save = []
+    ch_sentences_save = []
+    count = 0
+    max_count = 10000
+    for en_sent, ch_sent in zip(en_sentences, ch_sentences):
+        if len(en_sent.split()) > 20 and len(en_sent.split()) < 30 and len(ch_sent.split()) > 20 and len(ch_sent.split()) < 30:
+            en_sentences_save.append(en_sent)
+            ch_sentences_save.append(ch_sent)
+            count += 1
+        if count == max_count:
+            break
 
-from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
-from mxnet.gluon.data import DataLoader
-from bert_embedding.dataset import BertEmbeddingDataset
+    open("./data/train.en.sentences", "w",
+         encoding="utf-8").writelines(en_sentences_save)
+    open("./data/train.ch.sentences", "w",
+         encoding="utf-8").writelines(ch_sentences_save)
 
-from hyperParameters import GetHyperParameters as ghp
+    print("done!")
 
 
-def word_piece_tokenizer(sentences):
-    ctx = ghp.ctx
-    model = 'bert_12_768_12'
-    dataset_name = 'book_corpus_wiki_en_uncased'
-    max_seq_length = ghp.max_seq_len
-    batch_size = 256
-    _, vocab = gluonnlp.model.get_model(model,
-                                        dataset_name=dataset_name,
-                                        pretrained=True, ctx=ctx,
-                                        use_pooler=False,
-                                        use_decoder=False,
-                                        use_classifier=False)
-    tokenizer = BERTTokenizer(vocab)
-
-    transform = BERTSentenceTransform(tokenizer=tokenizer,
-                                      max_seq_length=max_seq_length,
-                                      pair=False)
-    dataset = BertEmbeddingDataset(sentences, transform)
-    data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
-    batches = []
-    for token_ids, _, _ in data_loader:
-        token_ids = token_ids.as_in_context(ctx)
-
-        for token_id in token_ids.asnumpy():
-            batches.append(token_id)
-
-    cut_results = []
-    for token_ids in batches:
-        tokens = []
-        for token_id in token_ids:
-            if token_id == 1:
-                break
-            if token_id in (2, 3):
-                continue
-            token = vocab.idx_to_token[token_id]
-            if token.startswith('##'):
-                token = token[2:]
-                tokens[-1] += token
-            else:  # iv, avg last oov
-                tokens.append(token)
-        cut_results.append(tokens)
-    return cut_results
+if __name__ == "__main__":
+    get_data()

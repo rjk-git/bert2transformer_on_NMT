@@ -19,9 +19,9 @@ class GetHyperParameters(object):
 
     # process corpus params
     min_count_vocab_size = 18
-    max_seq_len = 25
-    en_vocab_size = 120000
-    ch_vocab_size = 80000
+    max_seq_len = 30
+    en_vocab_size = 60000
+    ch_vocab_size = 50000
 
     # model hyper params
     layer_num = 6
@@ -38,7 +38,7 @@ class GetHyperParameters(object):
     # train params
     batch_size = 64
     epoch_num = 25
-    ctx = mx.gpu()
+    ctx = mx.cpu()
 
     adam_learning_rate = 0.0002
     learning_rate = 16.0

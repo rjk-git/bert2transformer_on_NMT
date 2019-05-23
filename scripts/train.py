@@ -1,18 +1,16 @@
 import sys
 sys.path.append("..")
+
 import os
-import bert_embedding
-import numpy as np
 import mxnet as mx
-
-from mxnet import gluon
-from mxnet.gluon import loss as gloss
-from mxnet import autograd, nd, init
+import numpy as np
 from mxboard import *
-
-from prepo import get_train_data_loader, load_ch_vocab
+from mxnet import autograd, gluon, init, nd
+from mxnet.gluon import loss as gloss
 from hyperParameters import GetHyperParameters as ghp
 from models.Transformer import Transformer
+from prepo import get_train_data_loader, load_ch_vocab
+
 
 sw = SummaryWriter(logdir='./logs', flush_secs=5)
 
@@ -33,7 +31,8 @@ def main():
 
 
 def get_learning_rate(step_num, warm_up_step=4000, d_model=ghp.model_dim):
-    learning_rate = pow(d_model, -0.5) * min(pow(step_num, -0.5), (step_num * pow(warm_up_step, -1.5)))
+    learning_rate = pow(d_model, -0.5) * min(pow(step_num, -0.5),
+                                             (step_num * pow(warm_up_step, -1.5)))
     return learning_rate
 
 
@@ -45,8 +44,10 @@ def train_and_valid(transformer_model):
 
     bert_optimizer = mx.optimizer.Adam(learning_rate=2e-5)
 
-    bert_trainer = gluon.Trainer(transformer_model.encoder.collect_params(), bert_optimizer)
-    model_trainer = gluon.Trainer(transformer_model.collect_params(select="decoder0_*|en_input_dense0_*|linear0_*"), optimizer)
+    bert_trainer = gluon.Trainer(
+        transformer_model.encoder.collect_params(), bert_optimizer)
+    model_trainer = gluon.Trainer(transformer_model.collect_params(
+        select="decoder0_*|en_input_dense0_*|linear0_*"), optimizer)
 
     for epoch in range(ghp.epoch_num):
         train_data_loader = get_train_data_loader()
@@ -60,10 +61,12 @@ def train_and_valid(transformer_model):
             y_zh_idx = zh_idxs
 
             with autograd.record():
-                loss_mean, acc = batch_loss(transformer_model, en_sentences, y_zh_idx, loss)
+                loss_mean, acc = batch_loss(
+                    transformer_model, en_sentences, y_zh_idx, loss)
             loss_scalar = loss_mean.asscalar()
             acc_scalar = acc.asscalar()
-            sw.add_scalar(tag='cross_entropy', value=loss_scalar, global_step=global_step)
+            sw.add_scalar(tag='cross_entropy', value=loss_scalar,
+                          global_step=global_step)
             sw.add_scalar(tag='acc', value=acc_scalar, global_step=global_step)
             global_step += 1
             loss_mean.backward()
@@ -72,13 +75,15 @@ def train_and_valid(transformer_model):
             model_trainer.step(1)
             bert_trainer.step(1)
 
-            print("loss:{0}, acc:{1}".format(str(loss_scalar)[:5], str(acc_scalar)[:5]))
+            print("loss:{0}, acc:{1}".format(
+                str(loss_scalar)[:5], str(acc_scalar)[:5]))
             print("\n")
 
             if count % 5000 == 0:
                 if not os.path.exists("parameters"):
                     os.makedirs("parameters")
-                model_params_file = "parameters/" + "re3_epoch{}_batch{}_loss{}_acc{}.params".format(epoch, count, str(loss_scalar)[:5], str(acc_scalar)[:5])
+                model_params_file = "parameters/" + "re3_epoch{}_batch{}_loss{}_acc{}.params".format(
+                    epoch, count, str(loss_scalar)[:5], str(acc_scalar)[:5])
                 transformer_model.save_parameters(model_params_file)
 
 
@@ -87,7 +92,8 @@ def batch_loss(transformer_model, en_sentences, y_zh_idx, loss):
     ch2idx, idx2ch = load_ch_vocab()
 
     y_zh_idx_nd = nd.array(y_zh_idx, ctx=ghp.ctx)
-    dec_input_zh_idx = nd.concat(nd.ones(shape=y_zh_idx_nd[:, :1].shape, ctx=ghp.ctx) * 2, y_zh_idx_nd[:, :-1], dim=1)
+    dec_input_zh_idx = nd.concat(nd.ones(
+        shape=y_zh_idx_nd[:, :1].shape, ctx=ghp.ctx) * 2, y_zh_idx_nd[:, :-1], dim=1)
 
     output = transformer_model(en_sentences, dec_input_zh_idx, True)
     predict = nd.argmax(nd.softmax(output, axis=-1), axis=-1)
