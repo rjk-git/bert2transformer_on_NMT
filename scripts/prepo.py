@@ -8,7 +8,7 @@ from collections import Counter
 
 from hyperParameters import GetHyperParameters as ghp
 
-ch2idx = {1:1}
+ch2idx = {}
 need_cut_sentences_num = 0
 
 
@@ -144,38 +144,32 @@ def padder(seq):
     return seq_pad
 
 
-def indexer(ch_sentence):
-    idx = []
-    global ch2idx
-    for word in (ch_sentence + " <eos>").split():
-        flag = ch2idx.get(word, 1)
-        print(flag)
-        if flag == 1:
-            # idx.append(1)
-            print(word)
-            for char in word:
-                idx.append(ch2idx.get(char, 1))
-        else:
-            idx.append(flag)
-    return idx
-
-
 def create_train_data(ch_sentences):
     # word to idx
-    global ch2idx
     ch2idx, _ = load_ch_vocab()
-    pool1 = multiprocessing.Pool()
-    ch_list = pool1.map(indexer, ch_sentences)
-    print("成功！中文句子索引{}条".format(len(ch_list)))
+    idxs = []
+    for sentence in tqdm(ch_sentences):
+        idx = []
+        for word in (sentence + " <eos>").split():
+            flag = ch2idx.get(word, 1)
+            if flag == 1:
+                # idx.append(1)
+                for char in word:
+                    idx.append(ch2idx.get(char, 1))
+            else:
+                idx.append(flag)
+        idxs.append(idx)
+    print("成功！中文句子索引{}条".format(len(idxs)))
 
     print("(4/4)PAD数据到最大长度{}...".format(ghp.max_seq_len))
     # train_zh_idx = np.zeros([len(ch_list), ghp.max_seq_len], np.int32)
     pool2 = multiprocessing.Pool()
-    train_zh_idx = pool2.map(padder, ch_list)
+
+    train_zh_idx = pool2.map(padder, idxs)
+
     train_zh_idx = np.array(train_zh_idx)
-    print("长度过长，被裁减的句子共计{}条".format(need_cut_sentences_num))
-    print("\n")
-    print("成功！PAD中文句子索引{}条".format(len(ch_list)))
+
+    print("成功！PAD中文句子索引{}条".format(len(idxs)))
 
     return train_zh_idx
 
@@ -183,6 +177,7 @@ def create_train_data(ch_sentences):
 def get_train_data_loader():
     batch_size = ghp.batch_size
     print("#######开始加载训练数据：英文， 中文（已分词）#########")
+
     print("(1/4)开始创建词典...")
     if os.path.exists(ghp.ch_vocab_file):
         print("字典存在，正在获取...")
@@ -312,8 +307,10 @@ def get_test_data_loader():
         yield batch_en_sentences_data, batch_zh_idx_data
 
 
-if __name__ == '__main__':
-    print(ch2idx)
+def main():
     for i in get_train_data_loader():
         pass
+
+if __name__ == '__main__':
+    main()
 

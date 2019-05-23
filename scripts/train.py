@@ -23,7 +23,7 @@ def main():
     # model.load_parameters("./parameters/*****.params", ctx=ghp.ctx)
 
     model.decoder.initialize(init=init.Xavier(), ctx=ghp.ctx)
-    model.en_input_dense.initialize(init=init.Xavier(), ctx=ghp.ctx)
+    model.en_output_dense.initialize(init=init.Xavier(), ctx=ghp.ctx)
     model.linear.initialize(init=init.Xavier(), ctx=ghp.ctx)
 
     # train and valid
@@ -31,8 +31,11 @@ def main():
 
 
 def get_learning_rate(step_num, warm_up_step=4000, d_model=ghp.model_dim):
+    highest_learning_rate = 0.0005
     learning_rate = pow(d_model, -0.5) * min(pow(step_num, -0.5),
                                              (step_num * pow(warm_up_step, -1.5)))
+    if learning_rate > highest_learning_rate:
+        learning_rate = highest_learning_rate
     return learning_rate
 
 

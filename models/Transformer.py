@@ -21,7 +21,7 @@ class Transformer(nn.Block):
 
         with self.name_scope():
 
-            self.en_input_dense = nn.Dense(
+            self.en_output_dense = nn.Dense(
                 ghp.model_dim, use_bias=False, flatten=False, dtype=ghp.dtype)
 
             self.linear = nn.Dense(
@@ -34,7 +34,7 @@ class Transformer(nn.Block):
         emb_left, idx_left = self.encoder(sentences_left)
 
         # en_emb shape : (batch_size, en_max_len, model_dim)
-        emb_left = self.en_input_dense(emb_left)
+        emb_left = self.en_output_dense(emb_left)
         output = self.decoder(
             emb_left, idx_left, idx_right, is_training)
 
@@ -58,7 +58,7 @@ class Encoder(nn.Block):
                                                          use_decoder=False,
                                                          use_classifier=False)
 
-    def forward(self, sentences, oov_way='avg', *args):
+    def forward(self, sentences, *args):
         tokenizer = BERTTokenizer(self.vocab)
         transform = BERTSentenceTransform(tokenizer=tokenizer,
                                           max_seq_length=self.max_seq_length,
@@ -243,6 +243,13 @@ class MultiHeadAttention(nn.Block):
         padding = nd.ones_like(mask) * -np.inf
         att_scores = nd.where(nd.equal(mask, 0), padding, att_scores)
 
+        # attention in window
+        win_mask = getWindowAttentionMask(q_len, k_len)
+        win_mask = nd.expand_dims(win_mask, axis=0)
+        win_mask = nd.broadcast_axes(win_mask, axis=0, size=ghp.head_num * ghp.batch_size)
+        padding = nd.ones_like(win_mask) * -np.inf
+        att_scores = nd.where(nd.equal(win_mask, 0), padding, att_scores)
+
         # att_weights shape: (batch_size * head_num, q_len, k_len)
         att_weights = nd.softmax(att_scores, axis=-1)
         output = nd.batch_dot(att_weights, V_)
@@ -314,3 +321,16 @@ def getSelfMask(q_seq):
     mask = nd.broadcast_axes(mask, axis=0, size=batch_size)
 
     return mask
+
+
+def getWindowAttentionMask(q_len, k_len, window_size=15):
+    e = nd.eye(q_len, k_len, 0, ctx=ghp.ctx)
+    for k in range(1, window_size + 1):
+        e0 = nd.eye(q_len, k_len, k, ctx=ghp.ctx)
+        e1 = nd.eye(q_len, k_len, -k, ctx=ghp.ctx)
+        e = e + e0 + e1
+    return e
+
+
+if __name__ == '__main__':
+    getWindowAttentionMask(8, 10)
