@@ -41,7 +41,7 @@ class Transformer(nn.Block):
         # output shape : (batch_size, max_seq_len, ch_vocab_size)
         output = self.linear(output)
 
-        # print(output)
+        # # # print(output)
         return output
 
 
@@ -104,17 +104,23 @@ class Decoder(nn.Block):
 
         # zh_emb shape: (batch_size, seq_len, model_dim)
         zh_emb = output + position
-
+        # print("en_idx", en_idx)
+        # print("zh_idx", zh_idx)
         # replace the pad with 0
-        mask = getMask(zh_idx, en_idx)
+        key_mask = get_key_mask(zh_idx, en_idx)
+        query_mask = get_query_mask(zh_idx, en_idx)
+
+        # print("mask", mask)
 
         self_mask = getSelfMask(zh_idx)
+        # print("self_mask", self_mask)
 
         dec_output = zh_emb
 
         for sub_layer in self.decoder_layers:
             dec_output = sub_layer(
-                en_emb, dec_output, mask, self_mask, is_training)
+                en_emb, dec_output, key_mask, self_mask, query_mask, is_training)
+
         return dec_output
 
     @staticmethod
@@ -141,13 +147,14 @@ class DecoderLayer(nn.Block):
             self.context_attention = MultiHeadAttention()
             self.feed_forward = FeedForward()
 
-    def forward(self, en_emb, zh_emb, mask, self_mask, is_training):
+    def forward(self, en_emb, zh_emb, key_mask, self_mask, query_mask, is_training):
         # self attention, all inputs are decoder inputs
         dec_output = self.self_masked_attention(
             zh_emb,
             zh_emb,
             zh_emb,
             self_mask,
+            query_mask,
             is_training)
 
         # query is decoder's outputs, key and value are encoder's inputs
@@ -155,7 +162,8 @@ class DecoderLayer(nn.Block):
             dec_output,
             en_emb,
             en_emb,
-            mask,
+            key_mask,
+            query_mask,
             is_training)
 
         # decoder's output
@@ -177,7 +185,7 @@ class MultiHeadAttention(nn.Block):
             self.dropout = nn.Dropout(ghp.dropout)
             self.LayerNorm = nn.LayerNorm(epsilon=ghp.norm_epsilon)
 
-    def forward(self, queries, keys, values, mask, is_training=True):
+    def forward(self, queries, keys, values, key_mask, query_mask, is_training=True):
         # queries shape: (batch_size, q_len, model_dim)
         # keys shape: (batch_size, k_len, model_dim)
         # values shape: (batch_size, k_len, model_dim)
@@ -187,10 +195,11 @@ class MultiHeadAttention(nn.Block):
         batch_size = queries.shape[0]
         q_len = queries.shape[1]
         k_len = keys.shape[1]
-
+        # print("queries", queries)
         Q = self.queries_dense(queries)
         K = self.keys_dense(keys)
         V = self.values_dense(values)
+        # print("Q", Q)
 
         c_dim = int(ghp.model_dim / ghp.head_num)
 
@@ -236,35 +245,53 @@ class MultiHeadAttention(nn.Block):
         # shape: (batch_size * head_num, q_len, k_len)
         att_scores = att_scores * scale
 
-        # mask
-        mask = nd.expand_dims(mask, axis=0)
-        mask = nd.broadcast_axes(mask, axis=0, size=ghp.head_num)
-        mask = nd.reshape(mask, shape=(-1, q_len, k_len))
-        padding = nd.ones_like(mask) * -np.inf
-        att_scores = nd.where(nd.equal(mask, 0), padding, att_scores)
+        # key mask
+        key_mask = nd.expand_dims(key_mask, axis=0)
+        key_mask = nd.broadcast_axes(key_mask, axis=0, size=ghp.head_num)
+        key_mask = nd.reshape(key_mask, shape=(-1, q_len, k_len))
+        padding = nd.ones_like(key_mask) * -1e9
+        att_scores = nd.where(nd.equal(key_mask, 0), padding, att_scores)
+        # print("att_scores[0]", att_scores[0])
 
         # attention in window
-        win_mask = getWindowAttentionMask(q_len, k_len)
-        win_mask = nd.expand_dims(win_mask, axis=0)
-        win_mask = nd.broadcast_axes(win_mask, axis=0, size=ghp.head_num * ghp.batch_size)
-        padding = nd.ones_like(win_mask) * -np.inf
-        att_scores = nd.where(nd.equal(win_mask, 0), padding, att_scores)
+        # win_mask = getWindowAttentionMask(q_len, k_len)
+        # win_mask = nd.expand_dims(win_mask, axis=0)
+        # win_mask = nd.broadcast_axes(win_mask, axis=0, size=mask.shape[0])
+        # padding = nd.ones_like(win_mask) * -1e9
+        # att_scores = nd.where(nd.equal(win_mask, 0), padding, att_scores)
 
         # att_weights shape: (batch_size * head_num, q_len, k_len)
         att_weights = nd.softmax(att_scores, axis=-1)
-        output = nd.batch_dot(att_weights, V_)
+        # print("att_weights[0]", att_weights[0])
+        # query mask
+        query_mask = nd.expand_dims(query_mask, axis=0)
+        query_mask = nd.broadcast_axes(query_mask, axis=0, size=ghp.head_num)
+        query_mask = nd.reshape(query_mask, shape=(-1, q_len, k_len))
+        padding = nd.ones_like(query_mask) * 0
+        att_weights = nd.where(nd.equal(query_mask, 0), padding, att_weights)
+        # print("att_weights[0]", att_weights[0])
 
+        # print("att_weights[1][0]", att_weights[1])
+        # print("att_weights[2][0]", att_weights[2])
+        # print("att_weights[7][0]", att_weights[7])
+        output = nd.batch_dot(att_weights, V_)
+        # print("output[0][0]", output[0][0])
+        # print("output[1][0]", output[1][0])
+        # print("output[2][0]", output[2][0])
+        # print("output[7][0]", output[7][0])
         outputs = nd.split(output, num_outputs=ghp.head_num, axis=0)
         empty = nd.empty(shape=(batch_size, q_len, 1), ctx=ghp.ctx)
         for out in outputs:
             empty = nd.concat(empty, out, dim=-1)
         output = empty[:, :, 1:]
-
+        # print("output[0][0]", output[0][0])
+        # breakpoint()
         if is_training:
             output = self.dropout(output)
 
         output = output + residual
         output = self.LayerNorm(output)
+
         return output
 
 
@@ -298,14 +325,24 @@ class FeedForward(nn.Block):
         return output
 
 
-def getMask(q_seq, k_seq):
+def get_key_mask(q_seq, k_seq):
     # q_seq shape : (batch_size, q_seq_len)
     # k_seq shape : (batch_size, k_seq_len)
     q_len = q_seq.shape[1]
     pad_mask = nd.not_equal(k_seq, 0)
     pad_mask = nd.expand_dims(pad_mask, axis=1)
     pad_mask = nd.broadcast_axes(pad_mask, axis=1, size=q_len)
+    return pad_mask
 
+
+def get_query_mask(q_seq, k_seq):
+    # q_seq shape : (batch_size, q_seq_len)
+    # k_seq shape : (batch_size, k_seq_len)
+    k_len = k_seq.shape[1]
+    pad_mask = nd.not_equal(q_seq, 0)
+    pad_mask = nd.expand_dims(pad_mask, axis=1)
+    pad_mask = nd.broadcast_axes(pad_mask, axis=1, size=k_len)
+    pad_mask = nd.transpose(pad_mask, axes=(0, 2, 1))
     return pad_mask
 
 
@@ -323,7 +360,7 @@ def getSelfMask(q_seq):
     return mask
 
 
-def getWindowAttentionMask(q_len, k_len, window_size=15):
+def getWindowAttentionMask(q_len, k_len, window_size=10):
     e = nd.eye(q_len, k_len, 0, ctx=ghp.ctx)
     for k in range(1, window_size + 1):
         e0 = nd.eye(q_len, k_len, k, ctx=ghp.ctx)
@@ -333,4 +370,5 @@ def getWindowAttentionMask(q_len, k_len, window_size=15):
 
 
 if __name__ == '__main__':
-    getWindowAttentionMask(8, 10)
+    mask = get_query_mask(nd.array([[1, 2, 0, 0, 0], [1, 2, 3, 4, 0]]), nd.array([[1, 2, 3, 0], [1, 2, 0, 0]]))
+    print(mask)

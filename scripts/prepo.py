@@ -183,9 +183,9 @@ def get_train_data_loader():
         print("字典存在，正在获取...")
         ch2idx, _ = load_ch_vocab()
     else:
+        print("字典不存在，开始生成...")
         make_ch_vocab(ghp.origin_ch_train_file)
         ch2idx, _ = load_ch_vocab()
-    print("成功！词典大小{}".format(ghp.ch_vocab_size))
 
     print("(2/4)获取训练数据...")
     origin_en_sentences, origin_ch_sentences = load_origin_sentences_data()
@@ -307,10 +307,7 @@ def get_test_data_loader():
         yield batch_en_sentences_data, batch_zh_idx_data
 
 
-def main():
-    for i in get_train_data_loader():
-        pass
 
 if __name__ == '__main__':
-    main()
+    make_ch_vocab()
 

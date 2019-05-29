@@ -10,6 +10,7 @@ from mxnet.gluon import loss as gloss
 from hyperParameters import GetHyperParameters as ghp
 from models.Transformer import Transformer
 from prepo import get_train_data_loader, load_ch_vocab
+from scripts.train_helper import translate
 
 
 sw = SummaryWriter(logdir='./logs', flush_secs=5)
@@ -20,7 +21,7 @@ def main():
     word2idx, _ = load_ch_vocab()
     model = Transformer(len(word2idx))
 
-    # model.load_parameters("./parameters/*****.params", ctx=ghp.ctx)
+    # model.load_parameters("./parameters/5_24_epoch1_batch40000_loss0.362_acc0.915.params", ctx=ghp.ctx)
 
     model.decoder.initialize(init=init.Xavier(), ctx=ghp.ctx)
     model.en_output_dense.initialize(init=init.Xavier(), ctx=ghp.ctx)
@@ -31,7 +32,7 @@ def main():
 
 
 def get_learning_rate(step_num, warm_up_step=4000, d_model=ghp.model_dim):
-    highest_learning_rate = 0.0005
+    highest_learning_rate = 0.0003
     learning_rate = pow(d_model, -0.5) * min(pow(step_num, -0.5),
                                              (step_num * pow(warm_up_step, -1.5)))
     if learning_rate > highest_learning_rate:
@@ -40,7 +41,7 @@ def get_learning_rate(step_num, warm_up_step=4000, d_model=ghp.model_dim):
 
 
 def train_and_valid(transformer_model):
-    loss = gloss.SoftmaxCrossEntropyLoss()
+    loss = gloss.SoftmaxCrossEntropyLoss(sparse_label=False)
     global_step = 1
     learning_rate = get_learning_rate(global_step)
     optimizer = mx.optimizer.Adam(learning_rate=learning_rate)
@@ -77,15 +78,17 @@ def train_and_valid(transformer_model):
             model_trainer.set_learning_rate(learning_rate)
             model_trainer.step(1)
             bert_trainer.step(1)
-
+            if count % 100 == 0:
+                print("onePred:", translate(transformer_model,
+                                        "If we give Donald Trump eight years in the White House, he will forever and fundamentally alter the character of this nation — who we are. And I cannot stand by and watch that happen."))
             print("loss:{0}, acc:{1}".format(
                 str(loss_scalar)[:5], str(acc_scalar)[:5]))
             print("\n")
 
-            if count % 5000 == 0:
+            if count % 10000 == 0:
                 if not os.path.exists("parameters"):
                     os.makedirs("parameters")
-                model_params_file = "parameters/" + "re3_epoch{}_batch{}_loss{}_acc{}.params".format(
+                model_params_file = "parameters/" + "5_27_epoch{}_batch{}_loss{}_acc{}.params".format(
                     epoch, count, str(loss_scalar)[:5], str(acc_scalar)[:5])
                 transformer_model.save_parameters(model_params_file)
 
@@ -100,6 +103,7 @@ def batch_loss(transformer_model, en_sentences, y_zh_idx, loss):
 
     output = transformer_model(en_sentences, dec_input_zh_idx, True)
     predict = nd.argmax(nd.softmax(output, axis=-1), axis=-1)
+
     is_target = nd.not_equal(y_zh_idx_nd, 0)
 
     # print("input_idx:", dec_input_right_idx[0])
@@ -114,13 +118,16 @@ def batch_loss(transformer_model, en_sentences, y_zh_idx, loss):
     predict_token = []
     for n in range(ghp.max_seq_len):
         predict_token.append(idx2ch[int(predict[0][n].asscalar())])
-    print("predict:", " ".join(predict_token))
+    print("predict:", " ".join(predict_token))\
 
     current = nd.equal(y_zh_idx_nd, predict) * is_target
     acc = nd.sum(current) / nd.sum(is_target)
 
-    # l_mean = my_loss(output, idx_right_nd)
-    l = loss(output, y_zh_idx_nd)
+    # label smoothing
+    one_hot_labels = nd.one_hot(y_zh_idx_nd, depth=len(ch2idx))
+    new_labels = (1.0 - ghp.label_smoothing) * one_hot_labels + ghp.label_smoothing / len(ch2idx)
+
+    l = loss(output, new_labels)
     l_mean = nd.sum(l) / batch_size
 
     return l_mean, acc
