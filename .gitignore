@@ -2,8 +2,6 @@
 /models/__pycache__/
 /models/__pycache__/*
 /scripts/__pycache__/*
-/scripts/data
 /scripts/logs
 /scripts/parameters
-/scripts/vocab
-
+/scripts/demonstration
