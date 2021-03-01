@@ -1,5 +1,4 @@
 import logging
-from nltk import bleu
 
 
 def config_logger(log_path):
@@ -15,7 +14,3 @@ def config_logger(log_path):
     logger.addHandler(shandler)
 
     return logger
-
-
-def belu():
-    pass

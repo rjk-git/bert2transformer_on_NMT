@@ -1,45 +1,50 @@
-import sys
 import math
-import gluonnlp
-import numpy as np
+import sys
 sys.path.append("../../")
 
+import gluonnlp
 import mxnet as mx
+import numpy as np
 from mxnet import nd
 from mxnet.gluon import nn
 
 
+
 class Transformer(nn.Block):
-    def __init__(self, en_vocab, ch_vocab, embedding_dim, model_dim, head_num, layer_num, ffn_dim, dropout, att_dropout, ffn_dropout, ctx=mx.cpu(), **kwargs):
+    def __init__(self, src_vocab, tgt_vocab, embedding_dim, model_dim, head_num, layer_num, ffn_dim, dropout, att_dropout, ffn_dropout, ctx=mx.cpu(), **kwargs):
         super(Transformer, self).__init__(**kwargs)
         self._ctx = ctx
         self._embedding_dim = embedding_dim
         self._model_dim = model_dim
-        self.en_pad_idx = en_vocab(en_vocab.padding_token)
-        self.ch_pad_idx = ch_vocab(ch_vocab.padding_token)
-        self.ch_embedding = nn.Embedding(len(ch_vocab.idx_to_token), embedding_dim)
+        self.src_pad_idx = src_vocab(src_vocab.padding_token)
+        self.tgt_pad_idx = tgt_vocab(tgt_vocab.padding_token)
+        self.tgt_embedding = nn.Embedding(
+            len(tgt_vocab.idx_to_token), embedding_dim)
         with self.name_scope():
             self.decoder = Decoder(embedding_dim, model_dim, head_num,
                                    layer_num, ffn_dim, dropout, att_dropout, ffn_dropout)
             self.linear = nn.Dense(
-                len(ch_vocab.idx_to_token), flatten=False, params=self.ch_embedding.collect_params())
+                len(tgt_vocab.idx_to_token), flatten=False, params=self.tgt_embedding.collect_params())
 
-    def forward(self, en_bert_output, en_idx, ch_idx):
-        self_tril_mask = self._get_self_tril_mask(ch_idx)
-        self_key_mask = self._get_key_mask(ch_idx, ch_idx, pad_idx=self.ch_pad_idx)
+    def forward(self, src_bert_output, src_idx, tgt_idx):
+        self_tril_mask = self._get_self_tril_mask(tgt_idx)
+        self_key_mask = self._get_key_mask(
+            tgt_idx, tgt_idx, pad_idx=self.tgt_pad_idx)
         self_att_mask = nd.greater((self_key_mask + self_tril_mask), 1)
 
-        context_att_mask = self._get_key_mask(en_idx, ch_idx, pad_idx=self.en_pad_idx)
-        non_pad_mask = self._get_non_pad_mask(ch_idx, pad_idx=self.ch_pad_idx)
+        context_att_mask = self._get_key_mask(
+            src_idx, tgt_idx, pad_idx=self.src_pad_idx)
+        non_pad_mask = self._get_non_pad_mask(
+            tgt_idx, pad_idx=self.tgt_pad_idx)
 
         position = nd.array(self._position_encoding_init(
-            ch_idx.shape[1], self._model_dim), ctx=self._ctx)
+            tgt_idx.shape[1], self._model_dim), ctx=self._ctx)
         position = nd.expand_dims(position, axis=0)
-        position = nd.broadcast_axes(position, axis=0, size=ch_idx.shape[0])
+        position = nd.broadcast_axes(position, axis=0, size=tgt_idx.shape[0])
         position = position * non_pad_mask
-        ch_emb = self.ch_embedding(ch_idx)
+        tgt_emb = self.tgt_embedding(tgt_idx)
         outputs = self.decoder(
-            en_bert_output, ch_emb, position, self_att_mask, context_att_mask, non_pad_mask)
+            src_bert_output, tgt_emb, position, self_att_mask, context_att_mask, non_pad_mask)
         outputs = self.linear(outputs)
         return outputs
 
@@ -83,8 +88,10 @@ class Decoder(nn.HybridBlock):
     def __init__(self, embedding_dim, model_dim, head_num, layer_num, ffn_dim, dropout, att_dropout, ffn_dropout, **kwargs):
         super(Decoder, self).__init__(**kwargs)
         with self.name_scope():
-            self.enc_model_dense = nn.Dense(model_dim, flatten=False, use_bias=False)
-            self.dec_model_dense = nn.Dense(model_dim, flatten=False, use_bias=False)
+            self.enc_model_dense = nn.Dense(
+                model_dim, flatten=False, use_bias=False)
+            self.dec_model_dense = nn.Dense(
+                model_dim, flatten=False, use_bias=False)
             self.decoder_layers = []
             for i in range(layer_num):
                 sub_layer = DecoderLayer(model_dim, head_num, ffn_dim, dropout,
