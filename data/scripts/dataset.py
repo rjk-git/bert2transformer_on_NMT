@@ -13,8 +13,8 @@ class MTDataset(gluon.data.Dataset):
             lines = [line.strip()
                      for line in fr_trans.readlines()]
         for line in lines:
-            # src, tgt = line.split(sep)
-            tgt, src = line.split(sep)
+            src, tgt = line.split(sep)
+            # tgt, src = line.split(sep)
             src_sentences.append(src)
             tgt_sentences.append(tgt)
         if len(src_sentences) != len(tgt_sentences):
